@@ -4,11 +4,7 @@
  */
 package plugins.MDNSDiscovery;
 
-import freenet.config.Config;
-import freenet.config.InvalidConfigValueException;
-import freenet.config.NodeNeedRestartException;
-import freenet.config.SubConfig;
-import freenet.support.api.StringArrCallback;
+
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -18,19 +14,20 @@ import java.io.UnsupportedEncodingException;
 import java.security.InvalidKeyException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.KeyFactory;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
-import java.security.SecureRandom;
-import java.security.Signature;
-import java.security.KeyFactory;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.security.SecureRandom;
+import java.security.Signature;
 import java.security.SignatureException;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+
 import sun.misc.BASE64Decoder;
 import sun.misc.BASE64Encoder;
 /**
@@ -118,7 +115,6 @@ public class DigitalSignature {
         BASE64Encoder encoder = new BASE64Encoder();
         String pri = encoder.encode(privatekey.getEncoded());
         String pub = encoder.encode(publickey.getEncoded());
-        System.out.println("here"+"  " +  pri+"  "+pub);
         prop.setProperty("DSAprivatekey",pri);
         prop.setProperty("DSApublickey",pub);
         generated = true;
@@ -129,7 +125,6 @@ public class DigitalSignature {
 
         String priv = prop.getProperty("DSAprivatekey");
         String publ = prop.getProperty("DSApublickey");
-        if (priv.length()==0) System.out.println("zero");
         BASE64Decoder decoder = new BASE64Decoder();
         byte[] pri = decoder.decodeBuffer(priv);
         byte[] pub = decoder.decodeBuffer(publ);
@@ -139,7 +134,6 @@ public class DigitalSignature {
         privatekey =keyFactory.generatePrivate(priKeySpec);
         publickey =keyFactory.generatePublic(pubKeySpec);
         generated = true;
-        System.out.println("hero");
     }
     public static boolean verify(String data,byte[] signature,byte[] publicKey) {
         boolean verify = false;

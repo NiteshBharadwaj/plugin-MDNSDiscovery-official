@@ -80,8 +80,7 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
 			final byte[] signature = DigitalSignature.getSignature(truncateAndSanitize("Freenet 0.7 Fproxy " + address));
                         final byte[] pubkey = DigitalSignature.getPublicKey();
                         properties.put("signature", signature);
-                        properties.put("pubkey",pubkey);
-                        System.out.println(DigitalSignature.verify(truncateAndSanitize("Freenet 0.7 Fproxy " + address),signature, pubkey));
+                        properties.put("pubkey",pubkey);                        
 			// Watch out for other nodes
 			jmdns.addServiceListener(MDNSDiscovery.freenetServiceType, new NodeMDNSListener(this));
 			

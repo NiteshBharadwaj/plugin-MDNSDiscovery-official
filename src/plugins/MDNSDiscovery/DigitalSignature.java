@@ -79,12 +79,7 @@ public class DigitalSignature {
         try {
             File file = new File("DSAconfig.properties");
             if (!file.exists()) {
-                file.createNewFile();
-                
-                prop.load(new FileInputStream(file));
-                generateProperties();
-            }
-            else if (!generated) {
+                file.createNewFile();              
                 prop.load(new FileInputStream(file));
                 generateProperties();
             }

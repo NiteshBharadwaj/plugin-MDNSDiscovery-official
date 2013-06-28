@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.Hashtable;
 
 import plugins.MDNSDiscovery.javax.jmdns.JmDNS;
 import plugins.MDNSDiscovery.javax.jmdns.ServiceEvent;
@@ -15,6 +16,7 @@ import plugins.MDNSDiscovery.javax.jmdns.ServiceInfo;
 import plugins.MDNSDiscovery.javax.jmdns.ServiceListener;
 import freenet.clients.http.PageNode;
 import freenet.config.Config;
+import freenet.config.SubConfig;
 import freenet.pluginmanager.FredPlugin;
 import freenet.pluginmanager.FredPluginHTTP;
 import freenet.pluginmanager.FredPluginRealVersioned;
@@ -22,6 +24,8 @@ import freenet.pluginmanager.PluginHTTPException;
 import freenet.pluginmanager.PluginRespirator;
 import freenet.support.HTMLNode;
 import freenet.support.api.HTTPRequest;
+import java.net.NetworkInterface;
+import java.util.Enumeration;
 
 /**
  * This plugin implements Zeroconf (called Bonjour/RendezVous by apple) support on a Freenet node.
@@ -44,7 +48,6 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
 	private LinkedList ourAdvertisedServices, ourDisabledServices, foundNodes;
 	private PluginRespirator pr;
 	private static final long version = 2;
-	
 	/**
 	 * Called upon plugin unloading : we unregister advertised services
 	 */
@@ -67,26 +70,55 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
 		ourAdvertisedServices = new LinkedList();
 		ourDisabledServices = new LinkedList();
 		foundNodes = new LinkedList();
-		final ServiceInfo fproxyInfo, TMCIInfo, fcpInfo, nodeInfo;
+		final ServiceInfo fproxyInfo, TMCIInfo, fcpInfo, nodeInfo,signedFproxyInfo;
 		
 		try{
 			// Create the multicast listener
 	        jmdns = JmDNS.create();
-
+                        Hashtable<String,byte[]> properties = new Hashtable<String,byte[]>(); 
 			final String address = "server -=" + pr.getNode().getMyName() + "=-";
-			
+			final byte[] signature = DigitalSignature.getSignature(truncateAndSanitize("Freenet 0.7 Fproxy " + address));
+                        final byte[] pubkey = DigitalSignature.getPublicKey();
+                        properties.put("signature", signature);
+                        properties.put("pubkey",pubkey);
+                        System.out.println(DigitalSignature.verify(truncateAndSanitize("Freenet 0.7 Fproxy " + address),signature, pubkey));
 			// Watch out for other nodes
 			jmdns.addServiceListener(MDNSDiscovery.freenetServiceType, new NodeMDNSListener(this));
 			
+                        
 			// Advertise Fproxy
 			fproxyInfo = ServiceInfo.create("_http._tcp.local.", truncateAndSanitize("Freenet 0.7 Fproxy " + address),
 					nodeConfig.get("fproxy").getInt("port"), 0, 0, "path=/");
 			if(nodeConfig.get("fproxy").getBoolean("enabled") && !nodeConfig.get("fproxy").getOption("bindTo").isDefault()){
 				jmdns.registerService(fproxyInfo);
-				ourAdvertisedServices.add(fproxyInfo);
+ 				ourAdvertisedServices.add(fproxyInfo);
 			}else
 				ourDisabledServices.add(fproxyInfo);
+                        
+                        //Signed FProxy
+                        signedFproxyInfo= ServiceInfo.create("_http._tcp.local.", truncateAndSanitize("Freenet 0.7 Fproxy " + address),
+					nodeConfig.get("fproxy").getInt("port"), 0, 0,properties  );
+                        if(nodeConfig.get("fproxy").getBoolean("enabled") && !nodeConfig.get("fproxy").getOption("bindTo").isDefault()) {
+                            JmDNS[] services = new JmDNS[50]; //assuming less than 50 services
+                                Enumeration en = NetworkInterface.getNetworkInterfaces();
+                                int j = 0;
+                                while(en.hasMoreElements()) {
+                                    NetworkInterface ni = (NetworkInterface)en.nextElement();
+                                    Enumeration en2 = ni.getInetAddresses();
+                                    if (ni.isUp()) {
+                                        if (en2.hasMoreElements()) {
+                                             InetAddress ia = (InetAddress)en2.nextElement();
+                                             services[j] = JmDNS.create(ia);
+                                             services[j].registerService(fproxyInfo);
+                                             j++;
+                                        }
 
+                                    }
+                                }
+                            ourAdvertisedServices.add(signedFproxyInfo);
+                        }
+                        else
+                            ourDisabledServices.add(signedFproxyInfo);
 			// Advertise FCP
 			fcpInfo = ServiceInfo.create("_fcp._tcp.local.", truncateAndSanitize("Freenet 0.7 FCP " + address),
 					nodeConfig.get("fcp").getInt("port"), 0, 0, "");

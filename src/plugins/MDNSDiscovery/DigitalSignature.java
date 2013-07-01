@@ -7,7 +7,6 @@ package plugins.MDNSDiscovery;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -20,13 +19,16 @@ import java.security.NoSuchProviderException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.Security;
 import java.security.Signature;
 import java.security.SignatureException;
 import java.security.spec.InvalidKeySpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 import sun.misc.BASE64Decoder;
 import sun.misc.BASE64Encoder;
@@ -40,7 +42,7 @@ public class DigitalSignature {
     private static boolean generated = false;
     private static Properties prop = new Properties();    
     
-    public static byte[] getPublicKey()  {
+    public static byte[] getPublicKey() throws UnsupportedEncodingException  {
         byte[] key = null;
         if (!generated) {
             initialize();
@@ -51,16 +53,18 @@ public class DigitalSignature {
     
     public static byte[] getSignature(String text)  {
         byte[] signature = null;
+        String sign = "";
         if (!generated) {
             initialize();
         }
         if (generated){
                 try { 
-                    Signature dsa = Signature.getInstance("SHA1withDSA", "SUN");
+                    Signature dsa = Signature.getInstance("SHA1withDSA", "BC");
                     dsa.initSign(privatekey);
                     byte[] buf = text.getBytes("UTF-8");
                     dsa.update(buf, 0, buf.length);
                     signature = dsa.sign();
+                    sign = new String(signature,"UTF-8");
                 } catch (NoSuchAlgorithmException ex) {
                     Logger.getLogger(DigitalSignature.class.getName()).log(Level.SEVERE, null, ex);
                 } catch (NoSuchProviderException ex) {
@@ -78,9 +82,9 @@ public class DigitalSignature {
     public static void initialize() {
         try {
             File file = new File("DSAconfig.properties");
+            Security.addProvider(new BouncyCastleProvider());
             if (!file.exists()) {
-                file.createNewFile();              
-                prop.load(new FileInputStream(file));
+                file.createNewFile();
                 generateProperties();
             }
             else {
@@ -101,17 +105,17 @@ public class DigitalSignature {
         }
     }
     private static void generateProperties() throws NoSuchAlgorithmException, NoSuchProviderException, UnsupportedEncodingException, IOException {
-        KeyPairGenerator keyGen = KeyPairGenerator.getInstance("DSA", "SUN");
+        KeyPairGenerator keyGen = KeyPairGenerator.getInstance("DSA", "BC");
         SecureRandom random = SecureRandom.getInstance("SHA1PRNG", "SUN");
         keyGen.initialize(1024, random);
         KeyPair pair = keyGen.generateKeyPair();
         privatekey = pair.getPrivate();
-        publickey = pair.getPublic();
+        publickey = pair.getPublic();        
         BASE64Encoder encoder = new BASE64Encoder();
         String pri = encoder.encode(privatekey.getEncoded());
         String pub = encoder.encode(publickey.getEncoded());
-        prop.setProperty("DSAprivatekey",pri);
-        prop.setProperty("DSApublickey",pub);
+        prop.put("DSAprivatekey",pri);
+        prop.put("DSApublickey",pub);
         generated = true;
         prop.store(new FileOutputStream("DSAconfig.properties"), null);
         
@@ -121,11 +125,11 @@ public class DigitalSignature {
         String priv = prop.getProperty("DSAprivatekey");
         String publ = prop.getProperty("DSApublickey");
         BASE64Decoder decoder = new BASE64Decoder();
-        byte[] pri = decoder.decodeBuffer(priv);
+        byte[] pri= decoder.decodeBuffer(priv);
         byte[] pub = decoder.decodeBuffer(publ);
-        X509EncodedKeySpec priKeySpec = new X509EncodedKeySpec(pri);
+        PKCS8EncodedKeySpec priKeySpec = new PKCS8EncodedKeySpec(pri);
         X509EncodedKeySpec pubKeySpec = new X509EncodedKeySpec(pub);
-        KeyFactory keyFactory = KeyFactory.getInstance("DSA", "SUN");
+        KeyFactory keyFactory = KeyFactory.getInstance("DSA", "BC");
         privatekey =keyFactory.generatePrivate(priKeySpec);
         publickey =keyFactory.generatePublic(pubKeySpec);
         generated = true;
@@ -134,10 +138,10 @@ public class DigitalSignature {
         boolean verify = false;
         try {
             X509EncodedKeySpec pubKeySpec = new X509EncodedKeySpec(publicKey);
-            KeyFactory keyFactory = KeyFactory.getInstance("DSA", "SUN");
+            KeyFactory keyFactory = KeyFactory.getInstance("DSA", "BC");
             PublicKey pubKey = keyFactory.generatePublic(pubKeySpec);
             byte[] buf = data.getBytes("UTF-8");
-            Signature sig = Signature.getInstance("SHA1withDSA", "SUN");
+            Signature sig = Signature.getInstance("SHA1withDSA", "BC");
             sig.initVerify(pubKey);
             sig.update(buf, 0,buf.length);
             verify = sig.verify(signature);

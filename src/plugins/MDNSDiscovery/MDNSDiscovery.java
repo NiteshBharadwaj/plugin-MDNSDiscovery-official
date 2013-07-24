@@ -14,7 +14,9 @@ import plugins.MDNSDiscovery.javax.jmdns.ServiceEvent;
 import plugins.MDNSDiscovery.javax.jmdns.ServiceInfo;
 import plugins.MDNSDiscovery.javax.jmdns.ServiceListener;
 import freenet.clients.http.PageNode;
+import freenet.crypt.BCModifiedSSL;
 import freenet.config.Config;
+import freenet.darknetapp.ECDSA;
 import freenet.pluginmanager.FredPlugin;
 import freenet.pluginmanager.FredPluginHTTP;
 import freenet.pluginmanager.FredPluginRealVersioned;
@@ -70,58 +72,52 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
 		ourAdvertisedServices = new LinkedList();
 		ourDisabledServices = new LinkedList();
 		foundNodes = new LinkedList();
-		final ServiceInfo fproxyInfo, TMCIInfo, fcpInfo, nodeInfo,signedFproxyInfo;
+		final ServiceInfo fproxyInfo, TMCIInfo, fcpInfo, nodeInfo,signedDarknetAppServerInfo;
 		
 		try{
 			// Create the multicast listener
                     jmdns = JmDNS.create();
                     String address = "server -=" + pr.getNode().getMyName() + "=-";
-                    byte[] signature = DigitalSignature.getSignature(truncateAndSanitize("Freenet 0.7 Fproxy " + address));
-                    byte[] pubkey = DigitalSignature.getPublicKey();
-                    byte[] signal = new byte[signature.length+1+pubkey.length];
-                    signal[signal.length-1] = (byte) signature.length;
-                    int pointer = signal[signal.length-1];
-                    for (int i=0;i!=pointer;i++) {
+                    String data2sign = truncateAndSanitize("Freenet 0.7 DarknetAppServer " + address);
+                    byte[] signature = ECDSA.getSignature(data2sign);
+                    byte[] pubkey = ECDSA.getPublicKey();
+                    byte[] pin = BCModifiedSSL.getSelfSignedCertificatePin().getBytes("UTF-8");
+                    byte[] signal = new byte[signature.length+4+pubkey.length+pin.length];
+                    signal[signal.length-1] = (byte) (signature.length%16);
+                    signal[signal.length-2] = (byte) (signature.length/16);
+                    signal[signal.length-3] = (byte) ((signature.length+pubkey.length)%16);
+                    signal[signal.length-4] = (byte) ((signature.length+pubkey.length)/16);
+                    int signEndPointer = signal[signal.length-2]*16 + signal[signal.length-1];
+                    int pubkeyEndPointer = signal[signal.length-4]*16 + signal[signal.length-3];
+                    for (int i=0;i!=signEndPointer;i++) {
                         signal[i] = signature[i];
                     }
-                    for (int i=pointer;i!=signal.length-1;i++) {
-                        signal[i] = pubkey[i-pointer];
+                    for (int i=signEndPointer;i!=pubkeyEndPointer;i++) {
+                        signal[i] = pubkey[i-signEndPointer];
+                    }
+                    for (int i=pubkeyEndPointer;i!=signal.length-4;i++) {
+                        signal[i] = pin[i-pubkeyEndPointer];
                     }
                     // Watch out for other nodes
                     jmdns.addServiceListener(MDNSDiscovery.freenetServiceType, new NodeMDNSListener(this));
 			
                         
                     // Advertise Fproxy
-                    fproxyInfo = ServiceInfo.create("_http._tcp.local.", truncateAndSanitize("Freenet 0.7 Fproxy " + address),
-					nodeConfig.get("fproxy").getInt("port"), 0, 0, signal);
+                    fproxyInfo = ServiceInfo.create("_http._tcp.local.", truncateAndSanitize("Freenet 0.7 FProxyServer " + address),
+					nodeConfig.get("fproxy").getInt("port"), 0, 0, "path=/");
                     if(nodeConfig.get("fproxy").getBoolean("enabled") && !nodeConfig.get("fproxy").getOption("bindTo").isDefault()){
 			jmdns.registerService(fproxyInfo);
  			ourAdvertisedServices.add(fproxyInfo);
                     } else
 			ourDisabledServices.add(fproxyInfo);
-                    //Signed FProxy
-                    signedFproxyInfo= ServiceInfo.create("_http._tcp.local.", truncateAndSanitize("Freenet 0.7 Fproxy " + address),
-					nodeConfig.get("fproxy").getInt("port"), 0, 0,signal);
-                    if(nodeConfig.get("fproxy").getBoolean("enabled") && !nodeConfig.get("fproxy").getOption("bindTo").isDefault()) {
-                        JmDNS[] services = new JmDNS[50]; //assuming less than 50 services
-                        Enumeration en = NetworkInterface.getNetworkInterfaces();
-                        int j = 0;
-                        while(en.hasMoreElements()) {
-                            NetworkInterface ni = (NetworkInterface)en.nextElement();
-                            Enumeration en2 = ni.getInetAddresses();
-                            if (ni.isUp()) {
-                                if (en2.hasMoreElements()) {
-                                    InetAddress ia = (InetAddress)en2.nextElement();
-                                    services[j] = JmDNS.create(ia);
-                                    services[j].registerService(fproxyInfo);
-                                    j++;
-                                }
-                            }
-                        }
-                        ourAdvertisedServices.add(signedFproxyInfo);
-                        }
-                        else
-                            ourDisabledServices.add(signedFproxyInfo);
+                    
+                    // Advertise DarknetAppServer to connect to DarknetApps
+                    signedDarknetAppServerInfo = ServiceInfo.create("_darknetAppServer._tcp.local.", data2sign,
+                                        nodeConfig.get("darknetApp0").getInt("port"), 0, 0, signal);
+                    jmdns.registerService(signedDarknetAppServerInfo);
+                    ourAdvertisedServices.add(signedDarknetAppServerInfo);
+                    
+                    
 			// Advertise FCP
 			fcpInfo = ServiceInfo.create("_fcp._tcp.local.", truncateAndSanitize("Freenet 0.7 FCP " + address),
 					nodeConfig.get("fcp").getInt("port"), 0, 0, "");

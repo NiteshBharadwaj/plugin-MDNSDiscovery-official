@@ -75,13 +75,18 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
 		final ServiceInfo fproxyInfo, TMCIInfo, fcpInfo, nodeInfo,signedDarknetAppServerInfo;
 		
 		try{
-			// Create the multicast listener
+                    // Create the multicast listener
                     jmdns = JmDNS.create();
                     String address = "server -=" + pr.getNode().getMyName() + "=-";
-                    String data2sign = truncateAndSanitize("Freenet 0.7 DarknetAppServer " + address);
+                    
+                    
+                    // A signal containing signature, pubkey, pin (For DarknetAppServer Broadcast)
+                    String pinStr = "pin -="+BCModifiedSSL.getSelfSignedCertificatePin() + "=-";
+                    String shortData = truncateAndSanitize("Freenet 0.7 DarknetAppServer " + address);
+                    String data2sign = shortData + pinStr; 
                     byte[] signature = ECDSA.getSignature(data2sign);
                     byte[] pubkey = ECDSA.getPublicKey();
-                    byte[] pin = BCModifiedSSL.getSelfSignedCertificatePin().getBytes("UTF-8");
+                    byte[] pin = pinStr.getBytes("UTF-8");
                     byte[] signal = new byte[signature.length+4+pubkey.length+pin.length];
                     signal[signal.length-1] = (byte) (signature.length%16);
                     signal[signal.length-2] = (byte) (signature.length/16);
@@ -98,6 +103,7 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
                     for (int i=pubkeyEndPointer;i!=signal.length-4;i++) {
                         signal[i] = pin[i-pubkeyEndPointer];
                     }
+                    
                     // Watch out for other nodes
                     jmdns.addServiceListener(MDNSDiscovery.freenetServiceType, new NodeMDNSListener(this));
 			
@@ -112,7 +118,7 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
 			ourDisabledServices.add(fproxyInfo);
                     
                     // Advertise DarknetAppServer to connect to DarknetApps
-                    signedDarknetAppServerInfo = ServiceInfo.create("_darknetAppServer._tcp.local.", data2sign,
+                    signedDarknetAppServerInfo = ServiceInfo.create("_darknetAppServer._tcp.local.", shortData,
                                         nodeConfig.get("darknetApp0").getInt("port"), 0, 0, signal);
                     jmdns.registerService(signedDarknetAppServerInfo);
                     ourAdvertisedServices.add(signedDarknetAppServerInfo);
@@ -293,7 +299,7 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
 			str = str.substring(0, 62);
 		return str;
 	}
-
+        
 	public long getRealVersion() {
 		return version;
 	}

@@ -4,11 +4,8 @@
 
 package plugins.MDNSDiscovery;
 
-import java.net.Inet4Address;
-import java.net.InetAddress;
-import java.net.NetworkInterface;
 import java.io.IOException;
-import java.util.Enumeration;
+import java.net.InetAddress;
 import java.util.Iterator;
 import java.util.LinkedList;
 
@@ -17,8 +14,8 @@ import plugins.MDNSDiscovery.javax.jmdns.ServiceEvent;
 import plugins.MDNSDiscovery.javax.jmdns.ServiceInfo;
 import plugins.MDNSDiscovery.javax.jmdns.ServiceListener;
 import freenet.clients.http.PageNode;
-import freenet.crypt.BCModifiedSSL;
 import freenet.config.Config;
+import freenet.crypt.BCModifiedSSL;
 import freenet.darknetapp.ECDSA;
 import freenet.pluginmanager.FredPlugin;
 import freenet.pluginmanager.FredPluginHTTP;
@@ -27,6 +24,9 @@ import freenet.pluginmanager.PluginHTTPException;
 import freenet.pluginmanager.PluginRespirator;
 import freenet.support.HTMLNode;
 import freenet.support.api.HTTPRequest;
+import java.net.Inet4Address;
+import java.net.NetworkInterface;
+import java.util.Enumeration;
 
 /**
  * This plugin implements Zeroconf (called Bonjour/RendezVous by apple) support on a Freenet node.
@@ -49,6 +49,7 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
 	private LinkedList ourAdvertisedServices, ourDisabledServices, foundNodes;
 	private PluginRespirator pr;
 	private static final long version = 2;
+	
 	/**
 	 * Called upon plugin unloading : we unregister advertised services
 	 */
@@ -71,77 +72,81 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
 		ourAdvertisedServices = new LinkedList();
 		ourDisabledServices = new LinkedList();
 		foundNodes = new LinkedList();
-		final ServiceInfo fproxyInfo, TMCIInfo, fcpInfo, nodeInfo,signedDarknetAppServerInfo;
+		final ServiceInfo fproxyInfo, TMCIInfo, fcpInfo, nodeInfo, signedDarknetAppServerInfo;
 		
 		try{
-                    // Create the multicast listener
-                    jmdns = JmDNS.create();
-                    String address = "server -=" + pr.getNode().getMyName() + "=-";
-                    
-                    
-                    // A signal containing signature, pubkey, pin (For DarknetAppServer Broadcast)
-                    String pinStr = "pin -="+BCModifiedSSL.getSelfSignedCertificatePin() + "=-";
-                    String shortData = truncateAndSanitize("Freenet 0.7 DarknetAppServer " + address);
-                    String data2sign = shortData + pinStr; 
-                    byte[] signature = ECDSA.getSignature(data2sign);
-                    byte[] pubkey = ECDSA.getPublicKey();
-                    byte[] pin = pinStr.getBytes("UTF-8");
-                    byte[] signal = new byte[signature.length+4+pubkey.length+pin.length];
-                    signal[signal.length-1] = (byte) (signature.length%16);
-                    signal[signal.length-2] = (byte) (signature.length/16);
-                    signal[signal.length-3] = (byte) ((signature.length+pubkey.length)%16);
-                    signal[signal.length-4] = (byte) ((signature.length+pubkey.length)/16);
-                    int signEndPointer = signal[signal.length-2]*16 + signal[signal.length-1];
-                    int pubkeyEndPointer = signal[signal.length-4]*16 + signal[signal.length-3];
-                    for (int i=0;i!=signEndPointer;i++) {
-                        signal[i] = signature[i];
-                    }
-                    for (int i=signEndPointer;i!=pubkeyEndPointer;i++) {
-                        signal[i] = pubkey[i-signEndPointer];
-                    }
-                    for (int i=pubkeyEndPointer;i!=signal.length-4;i++) {
-                        signal[i] = pin[i-pubkeyEndPointer];
-                    }
-                    
-                    // Watch out for other nodes
-                    jmdns.addServiceListener(MDNSDiscovery.freenetServiceType, new NodeMDNSListener(this));
+			// Create the multicast listener
+                      jmdns = JmDNS.create();
+
+			final String address = "server -=" + pr.getNode().getMyName() + "=-";
 			
-                        
-                    // Advertise Fproxy
-                    fproxyInfo = ServiceInfo.create("_http._tcp.local.", truncateAndSanitize("Freenet 0.7 FProxyServer " + address),
+			// Watch out for other nodes
+			jmdns.addServiceListener(MDNSDiscovery.freenetServiceType, new NodeMDNSListener(this));
+			
+			// A signal containing signature, pubkey, pin (For DarknetAppServer Broadcast)
+			String pinStr = "pin -="+BCModifiedSSL.getSelfSignedCertificatePin() + "=-";
+			String shortData = truncateAndSanitize("Freenet 0.7 DarknetAppServer " + address);
+			String data2sign = shortData + pinStr; 
+			byte[] signature = ECDSA.getSignature(data2sign);
+			byte[] pubkey = ECDSA.getPublicKey();
+			byte[] pin = pinStr.getBytes("UTF-8");
+			byte[] signal = new byte[signature.length+4+pubkey.length+pin.length];
+			signal[signal.length-1] = (byte) (signature.length%16);
+			signal[signal.length-2] = (byte) (signature.length/16);
+			signal[signal.length-3] = (byte) ((signature.length+pubkey.length)%16);
+			signal[signal.length-4] = (byte) ((signature.length+pubkey.length)/16);
+			int signEndPointer = signal[signal.length-2]*16 + signal[signal.length-1];
+			int pubkeyEndPointer = signal[signal.length-4]*16 + signal[signal.length-3];
+			for (int i=0;i!=signEndPointer;i++) {
+				signal[i] = signature[i];
+			}
+			for (int i=signEndPointer;i!=pubkeyEndPointer;i++) {
+				signal[i] = pubkey[i-signEndPointer];
+			}
+			for (int i=pubkeyEndPointer;i!=signal.length-4;i++) {
+				signal[i] = pin[i-pubkeyEndPointer];
+			}
+			// Advertise Fproxy
+			fproxyInfo = ServiceInfo.create("_http._tcp.local.", truncateAndSanitize("Freenet 0.7 Fproxy " + address),
 					nodeConfig.get("fproxy").getInt("port"), 0, 0, "path=/");
-                    if(nodeConfig.get("fproxy").getBoolean("enabled") && !nodeConfig.get("fproxy").getOption("bindTo").isDefault()){
-			jmdns.registerService(fproxyInfo);
- 			ourAdvertisedServices.add(fproxyInfo);
-                    } else
-			ourDisabledServices.add(fproxyInfo);
-                    
-                    // Advertise DarknetAppServer to connect to Mobiles Apps
-                    signedDarknetAppServerInfo = ServiceInfo.create("_darknetAppServer._tcp.local.", shortData,
-                                        nodeConfig.get("darknetApp").getInt("port"), 0, 0, signal);
-                    /*
-                    * The commented code results in broadcast on one random network interface
-                    * But we need to broadcast on all active interfaces
-                    jmdns.registerService(signedDarknetAppServerInfo);
-                    ourAdvertisedServices.add(signedDarknetAppServerInfo);
-                    */
-                    JmDNS[] services = new JmDNS[50]; //assuming less than 50 services
-                    Enumeration en = NetworkInterface.getNetworkInterfaces();
-                    int j = 0;
-                    while(en.hasMoreElements()) {
-                            NetworkInterface ni = (NetworkInterface)en.nextElement();
-                            Enumeration en2 = ni.getInetAddresses();
-                            if (ni.isUp() && !ni.isLoopback() && !ni.isVirtual()) {
-                                while (en2.hasMoreElements()) {
-                                    InetAddress ia = (InetAddress)en2.nextElement();
-                                    if (!(ia instanceof Inet4Address)) continue;
-                                    services[j] = JmDNS.create(ia);
-                                    services[j].registerService(signedDarknetAppServerInfo);
-                                    ourAdvertisedServices.add(signedDarknetAppServerInfo);
-                                    j++;
-                                }
-                            }
-                    }
+			if(nodeConfig.get("fproxy").getBoolean("enabled") && !nodeConfig.get("fproxy").getOption("bindTo").isDefault()){
+				jmdns.registerService(fproxyInfo);
+				ourAdvertisedServices.add(fproxyInfo);
+			}else
+				ourDisabledServices.add(fproxyInfo);
+				
+			// Advertise DarknetAppServer to connect to Mobiles Apps
+			signedDarknetAppServerInfo = ServiceInfo.create("_darknetAppServer._tcp.local.", shortData,
+				nodeConfig.get("darknetApp").getInt("port"), 0, 0, signal);
+			/**
+			* The commented code results in broadcast on one random network interface
+			* But we need to broadcast on all active interfaces
+			jmdns.registerService(signedDarknetAppServerInfo);
+			ourAdvertisedServices.add(signedDarknetAppServerInfo);
+			*/
+			JmDNS[] services = new JmDNS[50]; //assuming less than 50 services
+			Enumeration en = NetworkInterface.getNetworkInterfaces();
+			int j = 0;
+			while(en.hasMoreElements()) {
+				NetworkInterface ni = (NetworkInterface)en.nextElement();
+				Enumeration en2 = ni.getInetAddresses();
+				if (ni.isUp() && !ni.isLoopback() && !ni.isVirtual()) {
+					while (en2.hasMoreElements()) {
+						InetAddress ia = (InetAddress)en2.nextElement();
+                                                /**
+                                                 * Get rid of linklocal addresses and the 6 to 4 addresses as they give rise to conflicting probes
+                                                 * Note: All tethered networks generate an ipv4 as well as a link local ipv6. We can broadcast on either but not both
+                                                 */
+						if (ia.isLinkLocalAddress() || ia.getHostAddress().startsWith("2002:")) continue;
+						services[j] = JmDNS.create(ia);
+						services[j].registerService(signedDarknetAppServerInfo);
+						System.out.println("Advertising Darknet App Server On "+ ia.getHostAddress());
+						j++;
+					}
+				}
+			}
+			
+                        ourAdvertisedServices.add(signedDarknetAppServerInfo);
 			// Advertise FCP
 			fcpInfo = ServiceInfo.create("_fcp._tcp.local.", truncateAndSanitize("Freenet 0.7 FCP " + address),
 					nodeConfig.get("fcp").getInt("port"), 0, 0, "");
@@ -317,7 +322,7 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
 			str = str.substring(0, 62);
 		return str;
 	}
-        
+
 	public long getRealVersion() {
 		return version;
 	}

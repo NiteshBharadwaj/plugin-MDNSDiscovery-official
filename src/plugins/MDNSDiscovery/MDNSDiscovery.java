@@ -4,8 +4,11 @@
 
 package plugins.MDNSDiscovery;
 
-import java.io.IOException;
+import java.net.Inet4Address;
 import java.net.InetAddress;
+import java.net.NetworkInterface;
+import java.io.IOException;
+import java.util.Enumeration;
 import java.util.Iterator;
 import java.util.LinkedList;
 
@@ -24,10 +27,6 @@ import freenet.pluginmanager.PluginHTTPException;
 import freenet.pluginmanager.PluginRespirator;
 import freenet.support.HTMLNode;
 import freenet.support.api.HTTPRequest;
-import java.net.NetworkInterface;
-import java.util.Enumeration;
-import sun.misc.BASE64Decoder;
-import sun.misc.BASE64Encoder;
 
 /**
  * This plugin implements Zeroconf (called Bonjour/RendezVous by apple) support on a Freenet node.
@@ -117,13 +116,32 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
                     } else
 			ourDisabledServices.add(fproxyInfo);
                     
-                    // Advertise DarknetAppServer to connect to DarknetApps
+                    // Advertise DarknetAppServer to connect to Mobiles Apps
                     signedDarknetAppServerInfo = ServiceInfo.create("_darknetAppServer._tcp.local.", shortData,
-                                        nodeConfig.get("darknetApp0").getInt("port"), 0, 0, signal);
+                                        nodeConfig.get("darknetApp").getInt("port"), 0, 0, signal);
+                    /*
+                    * The commented code results in broadcast on one random network interface
+                    * But we need to broadcast on all active interfaces
                     jmdns.registerService(signedDarknetAppServerInfo);
                     ourAdvertisedServices.add(signedDarknetAppServerInfo);
-                    
-                    
+                    */
+                    JmDNS[] services = new JmDNS[50]; //assuming less than 50 services
+                    Enumeration en = NetworkInterface.getNetworkInterfaces();
+                    int j = 0;
+                    while(en.hasMoreElements()) {
+                            NetworkInterface ni = (NetworkInterface)en.nextElement();
+                            Enumeration en2 = ni.getInetAddresses();
+                            if (ni.isUp() && !ni.isLoopback() && !ni.isVirtual()) {
+                                while (en2.hasMoreElements()) {
+                                    InetAddress ia = (InetAddress)en2.nextElement();
+                                    if (!(ia instanceof Inet4Address)) continue;
+                                    services[j] = JmDNS.create(ia);
+                                    services[j].registerService(signedDarknetAppServerInfo);
+                                    ourAdvertisedServices.add(signedDarknetAppServerInfo);
+                                    j++;
+                                }
+                            }
+                    }
 			// Advertise FCP
 			fcpInfo = ServiceInfo.create("_fcp._tcp.local.", truncateAndSanitize("Freenet 0.7 FCP " + address),
 					nodeConfig.get("fcp").getInt("port"), 0, 0, "");

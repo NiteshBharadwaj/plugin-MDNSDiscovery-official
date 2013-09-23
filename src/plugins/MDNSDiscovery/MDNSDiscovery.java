@@ -9,10 +9,10 @@ import java.net.InetAddress;
 import java.util.Iterator;
 import java.util.LinkedList;
 
-import plugins.MDNSDiscovery.javax.jmdns.JmDNS;
-import plugins.MDNSDiscovery.javax.jmdns.ServiceEvent;
-import plugins.MDNSDiscovery.javax.jmdns.ServiceInfo;
-import plugins.MDNSDiscovery.javax.jmdns.ServiceListener;
+import javax.jmdns.JmDNS;
+import javax.jmdns.ServiceEvent;
+import javax.jmdns.ServiceInfo;
+import javax.jmdns.ServiceListener;
 import freenet.clients.http.PageNode;
 import freenet.config.Config;
 import freenet.crypt.BCModifiedSSL;
@@ -24,7 +24,6 @@ import freenet.pluginmanager.PluginHTTPException;
 import freenet.pluginmanager.PluginRespirator;
 import freenet.support.HTMLNode;
 import freenet.support.api.HTTPRequest;
-import java.net.Inet4Address;
 import java.net.NetworkInterface;
 import java.util.Enumeration;
 
@@ -54,7 +53,10 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
 	 * Called upon plugin unloading : we unregister advertised services
 	 */
 	public synchronized void terminate() {
-		jmdns.close();
+                try {
+                    jmdns.close();
+                } catch (IOException ex) {
+                }
 		goon = false;
 		notifyAll();
 	}
@@ -124,7 +126,8 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
 			jmdns.registerService(signedDarknetAppServerInfo);
 			ourAdvertisedServices.add(signedDarknetAppServerInfo);
 			*/
-			JmDNS[] services = new JmDNS[50]; //assuming less than 50 services
+			JmDNS[] services = new JmDNS[20]; //assuming less than 20 services
+                        ServiceInfo[] serviceInfos = new ServiceInfo[20];
 			Enumeration en = NetworkInterface.getNetworkInterfaces();
 			int j = 0;
 			while(en.hasMoreElements()) {
@@ -139,14 +142,14 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
                                                  */
 						if (ia.isLinkLocalAddress() || ia.getHostAddress().startsWith("2002:")) continue;
 						services[j] = JmDNS.create(ia);
-						services[j].registerService(signedDarknetAppServerInfo);
+                                                serviceInfos[j] = signedDarknetAppServerInfo.clone();
+						services[j].registerService(serviceInfos[j]);
 						System.out.println("Advertising Darknet App Server On "+ ia.getHostAddress());
 						j++;
 					}
 				}
 			}
-			
-			ourAdvertisedServices.add(signedDarknetAppServerInfo);
+                        ourAdvertisedServices.add(signedDarknetAppServerInfo);
 			// Advertise FCP
 			fcpInfo = ServiceInfo.create("_fcp._tcp.local.", truncateAndSanitize("Freenet 0.7 FCP " + address),
 					nodeConfig.get("fcp").getInt("port"), 0, 0, "");
@@ -254,9 +257,19 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
 			    ServiceInfo info = services[i];
 			    mDNSService = info.getName();
 				mDNSServer = info.getServer();
-				mDNSHost = info.getHostAddress();
+                                mDNSHost = "";
+                                String[] hosts = null;
+                                try {
+                                     hosts = info.getHostAddresses();
+                                } catch (NullPointerException e) {
+                                }
+                                if (hosts!=null) {
+                                    for (String h : hosts) {
+                                        mDNSHost = mDNSHost+" " +h;
+                                    }
+                                }
 				mDNSPort = Integer.toString(info.getPort());
-				mDNSDescription = info.getTextString();
+				mDNSDescription = info.getNiceTextString();
 				
 				peerRow.addChild("td", "class", "peer-name").addChild("#", (mDNSService == null ? "null" : mDNSService));
 				peerRow.addChild("td", "class", "peer-machine").addChild("#", (mDNSServer == null ? "null" : mDNSServer));

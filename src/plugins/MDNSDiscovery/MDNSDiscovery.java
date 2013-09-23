@@ -137,10 +137,9 @@ public class MDNSDiscovery implements FredPlugin, FredPluginHTTP, FredPluginReal
 					while (en2.hasMoreElements()) {
 						InetAddress ia = (InetAddress)en2.nextElement();
                                                 /**
-                                                 * Get rid of linklocal addresses and the 6 to 4 addresses as they give rise to conflicting probes
-                                                 * Note: All tethered networks generate an ipv4 as well as a link local ipv6. We can broadcast on either but not both
+                                                 * Get rid of the 6 to 4 addresses as they give rise to conflicting probes
                                                  */
-						if (ia.isLinkLocalAddress() || ia.getHostAddress().startsWith("2002:")) continue;
+						if (ia.getHostAddress().startsWith("2002:")) continue;
 						services[j] = JmDNS.create(ia);
                                                 serviceInfos[j] = signedDarknetAppServerInfo.clone();
 						services[j].registerService(serviceInfos[j]);

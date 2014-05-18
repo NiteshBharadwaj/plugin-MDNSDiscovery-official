@@ -1,83 +1,61 @@
-//Copyright 2003-2005 Arthur van Hoff, Rick Blair
-//Licensed under Apache License version 2.0
-//Original license LGPL
+// Copyright 2003-2005 Arthur van Hoff, Rick Blair
+// Licensed under Apache License version 2.0
+// Original license LGPL
 
-package plugins.MDNSDiscovery.javax.jmdns.impl.tasks;
+package javax.jmdns.impl.tasks;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
 import java.util.Timer;
-import java.util.TimerTask;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import plugins.MDNSDiscovery.javax.jmdns.impl.DNSCache;
-import plugins.MDNSDiscovery.javax.jmdns.impl.DNSConstants;
-import plugins.MDNSDiscovery.javax.jmdns.impl.DNSRecord;
-import plugins.MDNSDiscovery.javax.jmdns.impl.DNSState;
-import plugins.MDNSDiscovery.javax.jmdns.impl.JmDNSImpl;
+import javax.jmdns.impl.JmDNSImpl;
+import javax.jmdns.impl.constants.DNSConstants;
 
 /**
- * Periodicaly removes expired entries from the cache.
+ * Periodically removes expired entries from the cache.
  */
-public class RecordReaper extends TimerTask
-{
+public class RecordReaper extends DNSTask {
     static Logger logger = Logger.getLogger(RecordReaper.class.getName());
-
-    /**
-     * 
-     */
-    private final JmDNSImpl jmDNSImpl;
 
     /**
      * @param jmDNSImpl
      */
-    public RecordReaper(JmDNSImpl jmDNSImpl)
-    {
-        this.jmDNSImpl = jmDNSImpl;
+    public RecordReaper(JmDNSImpl jmDNSImpl) {
+        super(jmDNSImpl);
     }
 
-    public void start(Timer timer)
-    {
-        timer.schedule(this, DNSConstants.RECORD_REAPER_INTERVAL, DNSConstants.RECORD_REAPER_INTERVAL);
+    /*
+     * (non-Javadoc)
+     * @see javax.jmdns.impl.tasks.DNSTask#getName()
+     */
+    @Override
+    public String getName() {
+        return "RecordReaper(" + (this.getDns() != null ? this.getDns().getName() : "") + ")";
     }
 
-    public void run()
-    {
-        synchronized (this.jmDNSImpl)
-        {
-            if (this.jmDNSImpl.getState() == DNSState.CANCELED)
-            {
-                return;
-            }
-            logger.finest("run() JmDNS reaping cache");
-
-            // Remove expired answers from the cache
-            // -------------------------------------
-            // To prevent race conditions, we defensively copy all cache
-            // entries into a list.
-            List list = new ArrayList();
-            synchronized (this.jmDNSImpl.getCache())
-            {
-                for (Iterator i = this.jmDNSImpl.getCache().iterator(); i.hasNext();)
-                {
-                    for (DNSCache.CacheNode n = (DNSCache.CacheNode) i.next(); n != null; n = n.next())
-                    {
-                        list.add(n.getValue());
-                    }
-                }
-            }
-            // Now, we remove them.
-            long now = System.currentTimeMillis();
-            for (Iterator i = list.iterator(); i.hasNext();)
-            {
-                DNSRecord c = (DNSRecord) i.next();
-                if (c.isExpired(now))
-                {
-                    this.jmDNSImpl.updateRecord(now, c);
-                    this.jmDNSImpl.getCache().remove(c);
-                }
-            }
+    /*
+     * (non-Javadoc)
+     * @see javax.jmdns.impl.tasks.DNSTask#start(java.util.Timer)
+     */
+    @Override
+    public void start(Timer timer) {
+        if (!this.getDns().isCanceling() && !this.getDns().isCanceled()) {
+            timer.schedule(this, DNSConstants.RECORD_REAPER_INTERVAL, DNSConstants.RECORD_REAPER_INTERVAL);
         }
     }
+
+    @Override
+    public void run() {
+        if (this.getDns().isCanceling() || this.getDns().isCanceled()) {
+            return;
+        }
+        if (logger.isLoggable(Level.FINEST)) {
+            logger.finest(this.getName() + ".run() JmDNS reaping cache");
+        }
+
+        // Remove expired answers from the cache
+        // -------------------------------------
+        this.getDns().cleanCache();
+    }
+
 }

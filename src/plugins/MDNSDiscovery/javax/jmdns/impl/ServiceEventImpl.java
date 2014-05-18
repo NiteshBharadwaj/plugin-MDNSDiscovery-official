@@ -1,99 +1,124 @@
-///Copyright 2003-2005 Arthur van Hoff, Rick Blair
-//Licensed under Apache License version 2.0
-//Original license LGPL
+// /Copyright 2003-2005 Arthur van Hoff, Rick Blair
+// Licensed under Apache License version 2.0
+// Original license LGPL
 
-package plugins.MDNSDiscovery.javax.jmdns.impl;
+package javax.jmdns.impl;
 
-import java.util.logging.Logger;
-
-import plugins.MDNSDiscovery.javax.jmdns.JmDNS;
-import plugins.MDNSDiscovery.javax.jmdns.ServiceEvent;
-import plugins.MDNSDiscovery.javax.jmdns.ServiceInfo;
+import javax.jmdns.JmDNS;
+import javax.jmdns.ServiceEvent;
+import javax.jmdns.ServiceInfo;
 
 /**
  * ServiceEvent.
- *
+ * 
  * @author Werner Randelshofer, Rick Blair
- * @version %I%, %G%
  */
-public class ServiceEventImpl extends ServiceEvent
-{
-    private static Logger logger = Logger.getLogger(ServiceEvent.class.getName());
+/**
+ *
+ */
+public class ServiceEventImpl extends ServiceEvent {
+    /**
+     *
+     */
+    private static final long serialVersionUID = 7107973622016897488L;
+    // private static Logger logger = Logger.getLogger(ServiceEvent.class.getName());
     /**
      * The type name of the service.
      */
-    private String type;
+    private final String      _type;
     /**
-     * The instance name of the service. Or null, if the event was
-     * fired to a service type listener.
+     * The instance name of the service. Or null, if the event was fired to a service type listener.
      */
-    private String name;
+    private final String      _name;
     /**
-     * The service info record, or null if the service could be be resolved.
-     * This is also null, if the event was fired to a service type listener.
+     * The service info record, or null if the service could be be resolved. This is also null, if the event was fired to a service type listener.
      */
-    private ServiceInfoImpl info;
+    private final ServiceInfo _info;
 
     /**
      * Creates a new instance.
-     *
-     * @param source the JmDNS instance which originated the event.
-     * @param type   the type name of the service.
-     * @param name   the instance name of the service.
-     * @param info   the service info record, or null if the service could be be resolved.
+     * 
+     * @param jmDNS
+     *            the JmDNS instance which originated the event.
+     * @param type
+     *            the type name of the service.
+     * @param name
+     *            the instance name of the service.
+     * @param info
+     *            the service info record, or null if the service could be be resolved.
      */
-    public ServiceEventImpl(JmDNSImpl source, String type, String name, ServiceInfoImpl info)
-    {
-        super(source);
-        this.type = type;
-        this.name = name;
-        this.info = info;
+    public ServiceEventImpl(JmDNSImpl jmDNS, String type, String name, ServiceInfo info) {
+        super(jmDNS);
+        this._type = type;
+        this._name = name;
+        this._info = info;
     }
 
-    /**
-     * @see plugins.MDNSDiscovery.javax.jmdns.ServiceEvent#getDNS()
+    /*
+     * (non-Javadoc)
+     * @see javax.jmdns.ServiceEvent#getDNS()
      */
-    public JmDNS getDNS()
-    {
+    @Override
+    public JmDNS getDNS() {
         return (JmDNS) getSource();
     }
 
-    /**
-     * @see plugins.MDNSDiscovery.javax.jmdns.ServiceEvent#getType()
+    /*
+     * (non-Javadoc)
+     * @see javax.jmdns.ServiceEvent#getType()
      */
-    public String getType()
-    {
-        return type;
+    @Override
+    public String getType() {
+        return _type;
     }
 
-    /**
-     * @see plugins.MDNSDiscovery.javax.jmdns.ServiceEvent#getName()
+    /*
+     * (non-Javadoc)
+     * @see javax.jmdns.ServiceEvent#getName()
      */
-    public String getName()
-    {
-        return name;
+    @Override
+    public String getName() {
+        return _name;
     }
 
-    /**
-     * @see plugins.MDNSDiscovery.javax.jmdns.ServiceEvent#toString()
+    /*
+     * (non-Javadoc)
+     * @see java.util.EventObject#toString()
      */
-    public String toString()
-    {
-        StringBuffer buf = new StringBuffer();
-        buf.append("<" + getClass().getName() + "> ");
-        buf.append(super.toString());
-        buf.append(" name ");
-        buf.append(getName());
-        buf.append(" type ");
-        buf.append(getType());
-        buf.append(" info ");
-        buf.append(getInfo());
+    @Override
+    public String toString() {
+        StringBuilder buf = new StringBuilder();
+        buf.append("[" + this.getClass().getSimpleName() + "@" + System.identityHashCode(this) + " ");
+        buf.append("\n\tname: '");
+        buf.append(this.getName());
+        buf.append("' type: '");
+        buf.append(this.getType());
+        buf.append("' info: '");
+        buf.append(this.getInfo());
+        buf.append("']");
+        // buf.append("' source: ");
+        // buf.append("\n\t" + source + "");
+        // buf.append("\n]");
         return buf.toString();
     }
 
-    public ServiceInfo getInfo()
-    {
-        return info;
+    /*
+     * (non-Javadoc)
+     * @see javax.jmdns.ServiceEvent#getInfo()
+     */
+    @Override
+    public ServiceInfo getInfo() {
+        return _info;
+    }
+
+    /*
+     * (non-Javadoc)
+     * @see javax.jmdns.ServiceEvent#clone()
+     */
+    @Override
+    public ServiceEventImpl clone() {
+        ServiceInfoImpl newInfo = new ServiceInfoImpl(this.getInfo());
+        return new ServiceEventImpl((JmDNSImpl) this.getDNS(), this.getType(), this.getName(), newInfo);
     }
 
 }
